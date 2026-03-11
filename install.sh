@@ -134,7 +134,7 @@ install_dependencies() {
 # 函数: 下载 Hysteria 二进制文件
 #------------------------------------------------------------------------------
 download_hysteria_binary() {
-    DOWNLOAD_URL="https://github.com/code-gopher/hysteria/releases/download/app%2Fv1.0.5/hysteria-linux-${HYSTERIA_ARCH}"
+    DOWNLOAD_URL="https://github.com/code-gopher/hysteria/releases/download/app%2Fv1.0.6/hysteria-linux-${HYSTERIA_ARCH}"
     
     echo "==> 下载 Hysteria 二进制文件..."
     echo "    URL: ${DOWNLOAD_URL}"

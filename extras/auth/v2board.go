@@ -22,8 +22,16 @@ type V2boardApiProvider struct {
 
 // 用户列表
 var (
-	usersMap map[string]User
-	lock     sync.Mutex
+	usersMap   map[string]User
+	lock       sync.Mutex
+	httpClient = &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			IdleConnTimeout:     90 * time.Second,
+			MaxIdleConns:        10,
+			MaxIdleConnsPerHost: 2,
+		},
+	}
 )
 
 type User struct {
@@ -36,8 +44,7 @@ type ResponseData struct {
 }
 
 func getUserList(url string) ([]User, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}

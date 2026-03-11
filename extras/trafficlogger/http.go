@@ -31,6 +31,14 @@ func NewTrafficStatsServer(secret string) TrafficStatsServer {
 		KickMap:   make(map[string]struct{}),
 		OnlineMap: make(map[string]int),
 		Secret:    secret,
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				IdleConnTimeout:     30 * time.Second,
+				MaxIdleConns:        10,
+				MaxIdleConnsPerHost: 2,
+			},
+		},
 	}
 }
 
@@ -78,9 +86,7 @@ func (s *trafficStatsServerImpl) PushTrafficToV2board(url string) error {
 		return err
 	}
 	
-	// 添加 15 秒超时时间，防止 V2board 面板宕机时无限制挂起该协程
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	resp, err := s.httpClient.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		fmt.Println("V2board panel API Push error:", err)
 		return err
@@ -96,11 +102,12 @@ func (s *trafficStatsServerImpl) PushTrafficToV2board(url string) error {
 }
 
 type trafficStatsServerImpl struct {
-	Mutex     sync.RWMutex
-	StatsMap  map[string]*trafficStatsEntry
-	OnlineMap map[string]int
-	KickMap   map[string]struct{}
-	Secret    string
+	Mutex      sync.RWMutex
+	StatsMap   map[string]*trafficStatsEntry
+	OnlineMap  map[string]int
+	KickMap    map[string]struct{}
+	Secret     string
+	httpClient *http.Client
 }
 
 type trafficStatsEntry struct {
@@ -212,7 +219,10 @@ func (s *trafficStatsServerImpl) kick(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Mutex.Lock()
 	for _, id := range ids {
-		s.KickMap[id] = struct{}{}
+		// Only add to KickMap if the user is currently online
+		if _, online := s.OnlineMap[id]; online {
+			s.KickMap[id] = struct{}{}
+		}
 	}
 	s.Mutex.Unlock()
 
@@ -222,7 +232,10 @@ func (s *trafficStatsServerImpl) kick(w http.ResponseWriter, r *http.Request) {
 // 踢出用户名单
 func (s *trafficStatsServerImpl) NewKick(id string) bool {
 	s.Mutex.Lock()
-	s.KickMap[id] = struct{}{}
-	s.Mutex.Unlock()
+	defer s.Mutex.Unlock()
+	// Only add to KickMap if the user is currently online
+	if _, online := s.OnlineMap[id]; online {
+		s.KickMap[id] = struct{}{}
+	}
 	return true
 }

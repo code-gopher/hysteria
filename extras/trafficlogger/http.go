@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"sync"
@@ -54,32 +55,42 @@ func (s *trafficStatsServerImpl) PushTrafficToV2boardInterval(url string, interv
 
 // 向v2board 提交用户流量使用情况
 func (s *trafficStatsServerImpl) PushTrafficToV2board(url string) error {
-	s.Mutex.Lock()         // 写锁，阻止其他操作 StatsMap 的并发访问
-	defer s.Mutex.Unlock() // 确保在函数退出时释放写锁
+	var requestData map[string][2]int64
 
-	request := TrafficPushRequest{
-		Data: make(map[string][2]int64),
-	}
-	for id, stats := range s.StatsMap {
-		request.Data[id] = [2]int64{int64(stats.Tx), int64(stats.Rx)}
-	}
-	if len(request.Data) == 0 {
+	s.Mutex.Lock()
+	if len(s.StatsMap) == 0 {
+		s.Mutex.Unlock()
 		return nil
 	}
-	jsonData, err := json.Marshal(request.Data)
+	
+	requestData = make(map[string][2]int64)
+	for id, stats := range s.StatsMap {
+		requestData[id] = [2]int64{int64(stats.Tx), int64(stats.Rx)}
+	}
+	
+	// 无论成功与否先清空，避免累积。并且必须尽早释放写锁！
+	// 旧代码在锁内存锁时进行了长时间 HTTP 网络请求，会导致 Hysteria 所有的流量统计 Goroutines 全部严重阻塞、挤压甚至 OOM 内存爆炸。
+	s.StatsMap = make(map[string]*trafficStatsEntry)
+	s.Mutex.Unlock() // 释放锁后，再进行网络通信
+
+	jsonData, err := json.Marshal(requestData)
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	
+	// 添加 15 秒超时时间，防止 V2board 面板宕机时无限制挂起该协程
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		fmt.Println(resp)
+		fmt.Println("V2board panel API Push error:", err)
 		return err
 	}
 	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body) // Read body to ensure HTTP connection reuse
+
 	if resp.StatusCode != http.StatusOK {
 		return errors.New("HTTP request failed with status code: " + resp.Status)
 	}
-	s.StatsMap = make(map[string]*trafficStatsEntry)
 
 	return nil
 }

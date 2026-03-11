@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -35,7 +36,8 @@ type ResponseData struct {
 }
 
 func getUserList(url string) ([]User, error) {
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +45,7 @@ func getUserList(url string) ([]User, error) {
 
 	var responseData ResponseData
 	err = json.NewDecoder(resp.Body).Decode(&responseData)
+	io.Copy(io.Discard, resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -57,9 +60,10 @@ func UpdateUsers(url string, interval time.Duration, trafficlogger server.Traffi
 	userList, err := getUserList(url)
 	if err != nil {
 		fmt.Println("Error:", err)
-		return // 如果第一次获取失败，退出函数
+		// 第一次获取失败时不能 return，否则该 goroutine 死亡，以后永远不会再度更新
+	} else {
+		processUserList(userList, trafficlogger)
 	}
-	processUserList(userList, trafficlogger)
 
 	// 设置定时器
 	ticker := time.NewTicker(interval)

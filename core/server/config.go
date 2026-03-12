@@ -17,6 +17,7 @@ const (
 	defaultMaxIdleTimeout      = 30 * time.Second
 	defaultMaxIncomingStreams  = 1024
 	defaultUDPIdleTimeout      = 60 * time.Second
+	defaultTCPIdleTimeout      = 60 * time.Second
 )
 
 type Config struct {
@@ -29,6 +30,7 @@ type Config struct {
 	IgnoreClientBandwidth bool
 	DisableUDP            bool
 	UDPIdleTimeout        time.Duration
+	TCPIdleTimeout        time.Duration
 	Authenticator         Authenticator
 	EventLogger           EventLogger
 	TrafficLogger         TrafficLogger
@@ -88,6 +90,11 @@ func (c *Config) fill() error {
 		c.UDPIdleTimeout = defaultUDPIdleTimeout
 	} else if c.UDPIdleTimeout < 2*time.Second || c.UDPIdleTimeout > 600*time.Second {
 		return errors.ConfigError{Field: "UDPIdleTimeout", Reason: "must be between 2s and 600s"}
+	}
+	if c.TCPIdleTimeout == 0 {
+		c.TCPIdleTimeout = defaultTCPIdleTimeout
+	} else if c.TCPIdleTimeout < 2*time.Second || c.TCPIdleTimeout > 3600*time.Second {
+		return errors.ConfigError{Field: "TCPIdleTimeout", Reason: "must be between 2s and 3600s"}
 	}
 	if c.Authenticator == nil {
 		return errors.ConfigError{Field: "Authenticator", Reason: "must be set"}

@@ -25,9 +25,9 @@ var (
 	usersMap   map[string]User
 	lock       sync.Mutex
 	httpClient = &http.Client{
-		Timeout: 15 * time.Second,
+		Timeout: httpAuthTimeout,
 		Transport: &http.Transport{
-			IdleConnTimeout:     90 * time.Second,
+			IdleConnTimeout:     httpAuthTimeout,
 			MaxIdleConns:        10,
 			MaxIdleConnsPerHost: 2,
 		},

@@ -34,7 +34,7 @@ func NewTrafficStatsServer(secret string) TrafficStatsServer {
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 			Transport: &http.Transport{
-				IdleConnTimeout:     30 * time.Second,
+				IdleConnTimeout:     10 * time.Second,
 				MaxIdleConns:        10,
 				MaxIdleConnsPerHost: 2,
 			},
@@ -70,12 +70,12 @@ func (s *trafficStatsServerImpl) PushTrafficToV2board(url string) error {
 		s.Mutex.Unlock()
 		return nil
 	}
-	
+
 	requestData = make(map[string][2]int64)
 	for id, stats := range s.StatsMap {
 		requestData[id] = [2]int64{int64(stats.Tx), int64(stats.Rx)}
 	}
-	
+
 	// 无论成功与否先清空，避免累积。并且必须尽早释放写锁！
 	// 旧代码在锁内存锁时进行了长时间 HTTP 网络请求，会导致 Hysteria 所有的流量统计 Goroutines 全部严重阻塞、挤压甚至 OOM 内存爆炸。
 	s.StatsMap = make(map[string]*trafficStatsEntry)
@@ -85,7 +85,7 @@ func (s *trafficStatsServerImpl) PushTrafficToV2board(url string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	resp, err := s.httpClient.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		fmt.Println("V2board panel API Push error:", err)

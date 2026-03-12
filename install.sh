@@ -50,10 +50,9 @@ parse_arguments() {
         show_usage
     fi
 
-    echo "==> 使用配置:"
-    echo "    apiHost = ${APIHOST}"
-    echo "    apiKey  = ${APIKEY}"
-    echo "    nodeID  = ${NODEID}"
+    echo "    apiHost     = ${APIHOST}"
+    echo "    apiKey      = ${APIKEY}"
+    echo "    nodeID      = ${NODEID}"
     echo ""
 }
 
@@ -134,14 +133,15 @@ install_dependencies() {
 # 函数: 下载 Hysteria 二进制文件
 #------------------------------------------------------------------------------
 download_hysteria_binary() {
-    DOWNLOAD_URL="https://github.com/code-gopher/hysteria/releases/download/app%2Fv1.0.6/hysteria-linux-${HYSTERIA_ARCH}"
+    DOWNLOAD_URL="https://github.com/code-gopher/hysteria/releases/latest/download/hysteria-linux-${HYSTERIA_ARCH}"
     
-    echo "==> 下载 Hysteria 二进制文件..."
+    echo "==> 下载 Hysteria 最新版本..."
     echo "    URL: ${DOWNLOAD_URL}"
     
     rm -f /tmp/hysteria-download
-    if ! wget -O /tmp/hysteria-download "$DOWNLOAD_URL"; then
-        echo "    错误: 下载失败"
+    # 使用 -L 选项处理 GitHub 的重定向
+    if ! wget -L -O /tmp/hysteria-download "$DOWNLOAD_URL"; then
+        echo "    错误: 下载失败 (请检查网络或 GitHub 访问情况)"
         exit 1
     fi
     
@@ -217,10 +217,12 @@ masquerade:
     url: https://mirrors.ustc.edu.cn/
     rewriteHost: true
 quic:
-  initStreamReceiveWindow: 4194304
-  maxStreamReceiveWindow: 4194304
-  initConnReceiveWindow: 10485760
-  maxConnReceiveWindow: 10485760
+  initStreamReceiveWindow: 262144
+  maxStreamReceiveWindow: 1048576
+  initConnReceiveWindow: 524288
+  maxConnReceiveWindow: 4194304
+  maxIdleTimeout: 30s
+  keepAlivePeriod: 10s
 EOF
     
     echo "    配置文件已创建: /etc/hysteria/config.yaml"
@@ -240,8 +242,12 @@ After=network.target
 
 [Service]
 Type=simple
+Environment=GOGC=20 GOMAXPROCS=1
 ExecStart=/usr/local/bin/hysteria -c /etc/hysteria/config.yaml server
-Restart=on-failure
+Restart=always
+RestartSec=5
+MemoryMax=100M
+MemoryHigh=90M
 
 [Install]
 WantedBy=multi-user.target
@@ -266,10 +272,15 @@ configure_openrc_service() {
 
 name="hysteria"
 description="Hysteria2 Server"
+export GOGC=20
+export GOMAXPROCS=1
+rc_ulimit="-m 102400"
 command="/usr/local/bin/hysteria"
 command_args="-c /etc/hysteria/config.yaml server"
 pidfile="/var/run/hysteria.pid"
 command_background="yes"
+respawn_delay=5
+respawn_max=0
 
 depend() {
     need net
